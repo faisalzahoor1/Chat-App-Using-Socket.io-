@@ -75,31 +75,79 @@
 </head>
 
 <body>
+
     <ul id="messages"></ul>
+    <form id="nickNameFrom" action="">
+        <input id="nickNameInput" placeholder="Enter Your Nick Name" autocomplete="off" /><button>Submit</button>
+    </form>
     <form id="form" action="">
         <input id="input" autocomplete="off" /><button>Send</button>
+        <br>
+        <div id="typing"></div>
     </form>
     <button id="connectBtn">Disconnect</button>
     <script src="/socket.io/socket.io.js"></script>
     <script>
+        let counter = 0;
         const socket = io({
-            auth:{
+            auth: {
                 serverOffset: 0
-            }
+            },
+            ackTimeout: 10000,
         });
 
         let connected = true;
+        let nickname = "anonymous";
+        let timeout;
 
         const form = document.getElementById('form');
         const input = document.getElementById('input');
         const messages = document.getElementById('messages');
         const connectBtn = document.getElementById('connectBtn');
+        const typing = document.getElementById('typing');
+
+        input.addEventListener('input', (e) => {
+            socket.emit('typing', nickname)
+
+            clearTimeout(timeout)
+            timeout = setTimeout(() => {
+                socket.emit('stop typing', nickname)
+            }, 1500)
+        })
+
+        socket.on('typing', (nickname) => {
+            typing.textContent = `${nickname} is typing`;
+        })
+        socket.on('stop typing', (nickname) => {
+            typing.textContent = '';
+        })
+
+        const nickNameFrom = document.getElementById('nickNameFrom');
+        const nickNameInput = document.getElementById('nickNameInput');
+
+        nickNameFrom.addEventListener('submit', (e) => {
+            e.preventDefault();
+            if (nickNameInput.value.trim()) {
+                nickname = nickNameInput.value.trim();
+                socket.auth.nickname = nickname;
+                nickNameInput.value = '';
+                nickNameFrom.style.display = 'none';
+                alert(`your nick name is updated to ${nickname}`);
+            }
+        });
 
 
         form.addEventListener('submit', (e) => {
             e.preventDefault();
             if (input.value) {
-                socket.emit("chat message", input.value)
+                const clientoffset = `${socket.id}-${counter++}`;
+                const item = document.createElement('li');
+                item.textContent = `${nickname}: ${input.value.trim()}`;
+                messages.appendChild(item);
+                window.scrollTo(0, document.body.scrollHeight);
+                socket.emit("chat message", input.value, clientoffset, nickname, (response) => {
+                    console.log("Server Response", response)
+                });
                 input.value = '';
             }
         });
