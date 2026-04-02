@@ -75,6 +75,13 @@
 </head>
 
 <body>
+    <div>
+        <h3>Online Users:</h3>
+        <ul id="onlineUsers"></ul>
+    </div>
+    <select id="userSelect">
+        <option value="">Public</option>
+    </select>
 
     <ul id="messages"></ul>
     <form id="nickNameFrom" action="">
@@ -105,6 +112,25 @@
         const messages = document.getElementById('messages');
         const connectBtn = document.getElementById('connectBtn');
         const typing = document.getElementById('typing');
+        const onlineUsers = document.getElementById('onlineUsers');
+        const userSelect = document.getElementById('userSelect');
+
+        socket.on('online users', (users) => {
+            onlineUsers.innerHTML = '';
+            userSelect.innerHTML = '<option value="">Public</option>';
+
+            users.forEach(user => {
+                const li = document.createElement('li');
+                li.textContent = user;
+                onlineUsers.appendChild(li);
+
+                const option = document.createElement('option');
+                option.value = user;
+                option.textContent = user;
+                userSelect.appendChild(option);
+            });
+        });
+
 
         input.addEventListener('input', (e) => {
             socket.emit('typing', nickname)
@@ -114,6 +140,14 @@
                 socket.emit('stop typing', nickname)
             }, 1500)
         })
+        // socket.on('online users', (users) => {
+        //     onlineUsers.innerHTML = ''
+        //     users.forEach(user => {
+        //         const li = document.createElement('li')
+        //         li.textContent = user;
+        //         onlineUsers.appendChild(li)
+        //     });
+        // })
 
         socket.on('typing', (nickname) => {
             typing.textContent = `${nickname} is typing`;
@@ -129,7 +163,8 @@
             e.preventDefault();
             if (nickNameInput.value.trim()) {
                 nickname = nickNameInput.value.trim();
-                socket.auth.nickname = nickname;
+                socket.emit("set nickname", nickname)
+                // socket.auth.nickname = nickname;
                 nickNameInput.value = '';
                 nickNameFrom.style.display = 'none';
                 alert(`your nick name is updated to ${nickname}`);
@@ -139,18 +174,53 @@
 
         form.addEventListener('submit', (e) => {
             e.preventDefault();
-            if (input.value) {
-                const clientoffset = `${socket.id}-${counter++}`;
-                const item = document.createElement('li');
-                item.textContent = `${nickname}: ${input.value.trim()}`;
-                messages.appendChild(item);
-                window.scrollTo(0, document.body.scrollHeight);
-                socket.emit("chat message", input.value, clientoffset, nickname, (response) => {
-                    console.log("Server Response", response)
+            if (!input.value.trim()) return;
+
+            const message = input.value.trim();
+            const selectedUser = userSelect.value;
+
+            // 🔴 PRIVATE MESSAGE
+            if (selectedUser) {
+                socket.emit('private message', selectedUser, message, (res) => {
+                    console.log(res);
                 });
-                input.value = '';
+
+                // show locally
+                const item = document.createElement('li');
+                item.textContent = `To ${selectedUser} (private): ${message}`;
+                item.style.color = "red";
+                messages.appendChild(item);
             }
+            // 🟢 PUBLIC MESSAGE
+            else {
+                const clientoffset = `${socket.id}-${counter++}`;
+
+                const item = document.createElement('li');
+                item.textContent = `${nickname}: ${message}`;
+                messages.appendChild(item);
+
+                socket.emit("chat message", message, clientoffset, nickname);
+            }
+
+            input.value = '';
         });
+
+        // form.addEventListener('submit', (e) => {
+        //     e.preventDefault();
+        //     // const message = input.value.trim();
+        //     // const selectedUser = userSelect.value;
+        //     if (input.value) {
+        //         const clientoffset = `${socket.id}-${counter++}`;
+        //         const item = document.createElement('li');
+        //         item.textContent = `${nickname}: ${input.value.trim()}`;
+        //         messages.appendChild(item);
+        //         window.scrollTo(0, document.body.scrollHeight);
+        //         socket.emit("chat message", input.value, clientoffset, nickname, (response) => {
+        //             console.log("Server Response", response)
+        //         });
+        //         input.value = '';
+        //     }
+        // });
 
         socket.on('chat message', (msg, serverOffset) => {
             const item = document.createElement('li');
@@ -158,6 +228,12 @@
             messages.appendChild(item);
             window.scrollTo(0, document.body.scrollHeight);
             socket.auth.serverOffset = serverOffset;
+        });
+        socket.on('private message', (msg) => {
+            const item = document.createElement('li');
+            item.textContent = msg;
+            item.style.color = "red";
+            messages.appendChild(item);
         });
 
         connectBtn.addEventListener("click", () => {

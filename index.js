@@ -38,6 +38,45 @@ if (cluster.isPrimary) {
     })
 
     io.on('connection', async (socket) => {
+
+
+        socket.on('private message', async (toNickname, message, callback) => {
+            try {
+                const sockets = await io.fetchSockets();
+
+                // find target user socket
+                const target = sockets.find(s => s.data.nickname === toNickname);
+
+                if (!target) {
+                    return callback && callback("User not found");
+                }
+
+                // send ONLY to that user
+                io.to(target.id).emit('private message', `${socket.data.nickname} (private): ${message}`);
+
+                callback && callback("OK");
+
+            } catch (err) {
+                console.log(err);
+                callback && callback("error");
+            }
+        });
+
+        async function sendOnlineUsers() {
+            const sockets = await io.fetchSockets();
+
+            const users = sockets
+                .map(s => s.data.nickname)
+                .filter(Boolean);
+
+            io.emit('online users', users)
+        }
+        socket.on('set nickname', (nickname) => {
+            socket.data.nickname = nickname;
+            sendOnlineUsers();
+        })
+
+
         socket.on('typing', (nickname) => {
             socket.broadcast.emit('typing', nickname)
         })
@@ -58,6 +97,8 @@ if (cluster.isPrimary) {
             // messages.push(messageWithId);
             // io.emit('chat message', messageWithId);
         });
+
+
         if (!socket.recovered) {
             try {
                 await db.each('SELECT id, content FROM messages WHERE id > ?', [socket.handshake.auth.serverOffset || 0], (_err, row) => {
